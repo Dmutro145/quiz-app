@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кабінет викладача - Результати</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .table-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-top: 30px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <h2>Результати тестування студентів</h2>
+            <a href="/" class="btn btn-outline-primary">На головну</a>
+        </div>
+               <!-- Блок аналітики -->
+        <div class="row mb-4" id="analyticsRow">
+            <div class="col-md-4">
+                <div class="card text-center bg-primary text-white shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Всього тестів</h5>
+                        <h2 class="display-5 fw-bold" id="totalTests">0</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center bg-success text-white shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Унікальних студентів</h5>
+                        <h2 class="display-5 fw-bold" id="uniqueStudents">0</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center bg-warning text-dark shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Середня успішність</h5>
+                        <h2 class="display-5 fw-bold" id="avgScore">0%</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="table-container table-responsive">
+            <table class="table table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Дата</th>
+                        <th>Студент</th>
+                        <th>Група</th>
+                        <th>Дисципліна</th>
+                        <th>Лекція</th>
+                        <th>Бал</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                    <tr>
+                        <td colspan="6" class="text-center">Завантаження даних...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+        // Завантажуємо аналітику
+    fetch('/api/analytics')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('totalTests').textContent = data.total_tests;
+            document.getElementById('uniqueStudents').textContent = data.unique_students;
+            document.getElementById('avgScore').textContent = data.average_score_percent + '%';
+        })
+        .catch(error => console.error('Помилка завантаження аналітики:', error));
+        
+    fetch('/api/results')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = ''; // Очищаємо заглушку
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Ще немає жодного результату.</td></tr>';
+                return;
+            }
+
+            data.forEach(row => {
+                // Форматуємо дату (вона приходить у форматі YYYY-MM-DD HH:MM:SS)
+                const date = new Date(row.created_at).toLocaleString('uk-UA');
+                
+                // Визначаємо колір оцінки
+                let scoreColor = "text-danger"; // погано
+                const percentage = (row.score / row.total_questions) * 100;
+                if (percentage >= 75) scoreColor = "text-success"; // добре
+                else if (percentage >= 50) scoreColor = "text-warning"; // задовільно
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${date}</td>
+                    <td class="fw-bold">${row.student_name}</td>
+                    <td>${row.group_name}</td>
+                    <td>${row.discipline_name}</td>
+                    <td>${row.lecture_title}</td>
+                    <td class="${scoreColor} fw-bold fs-5">${row.score} / ${row.total_questions}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        })
+        .catch(error => {
+            console.error('Помилка:', error);
+            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Помилка завантаження даних.</td></tr>';
+        });
+});
+</script>
+</body>
+</html>

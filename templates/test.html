@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проходження тесту</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .question-card { margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-check-input:checked { background-color: #198754; border-color: #198754; }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 id="headerTitle">Тестування</h3>
+        <span class="badge bg-primary fs-6" id="studentInfo"></span>
+    </div>
+
+    <div id="loading" class="text-center mt-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2">Завантаження питань...</p>
+    </div>
+
+    <form id="quizForm" class="d-none">
+        <div id="questionsContainer"></div>
+        <button type="submit" class="btn btn-success btn-lg w-100 mt-3" id="submitBtn">Завершити тест</button>
+    </form>
+
+    <!-- Блок результатів (спочатку прихований) -->
+    <div id="resultBlock" class="d-none card text-center p-5 shadow">
+        <h2 class="text-success mb-3">Тест завершено!</h2>
+        <h1 class="display-1" id="scoreDisplay">0/0</h1>
+        <p class="fs-4">Ваш результат збережено в базі даних.</p>
+        <a href="/" class="btn btn-primary mt-3">Повернутися на головну</a>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. Отримуємо дані студента
+    const studentDataStr = localStorage.getItem('studentData');
+    if (!studentDataStr) {
+        alert("Дані студента не знайдено. Будь ласка, зареєструйтеся.");
+        window.location.href = '/';
+        return;
+    }
+    const studentData = JSON.parse(studentDataStr);
+    
+    document.getElementById('headerTitle').textContent = studentData.lecture_title;
+    document.getElementById('studentInfo').textContent = `${studentData.full_name} | ${studentData.group_name}`;
+
+    let currentQuestions = [];
+
+    // 2. Завантажуємо питання з сервера
+    fetch(`/api/lectures/${studentData.lecture_id}/test?limit=10`)
+        .then(response => {
+            if (!response.ok) throw new Error("Не вдалося завантажити питання");
+            return response.json();
+        })
+        .then(data => {
+            currentQuestions = data.questions;
+            document.getElementById('loading').classList.add('d-none');
+            document.getElementById('quizForm').classList.remove('d-none');
+            renderQuestions();
+        })
+        .catch(error => {
+            alert(error.message);
+            window.location.href = '/';
+        });
+
+    // 3. Виводимо питання на екран
+    function renderQuestions() {
+        const container = document.getElementById('questionsContainer');
+        
+        currentQuestions.forEach((q, index) => {
+            const qDiv = document.createElement('div');
+            qDiv.className = 'card question-card';
+            qDiv.innerHTML = `
+                <div class="card-body">
+                    <h5 class="card-title mb-3">${index + 1}. ${q.text}</h5>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q_${q.id}" id="q_${q.id}_a" value="A" required>
+                        <label class="form-check-label w-100" for="q_${q.id}_a">${q.option_a}</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q_${q.id}" id="q_${q.id}_b" value="B">
+                        <label class="form-check-label w-100" for="q_${q.id}_b">${q.option_b}</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q_${q.id}" id="q_${q.id}_c" value="C">
+                        <label class="form-check-label w-100" for="q_${q.id}_c">${q.option_c}</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q_${q.id}" id="q_${q.id}_d" value="D">
+                        <label class="form-check-label w-100" for="q_${q.id}_d">${q.option_d}</label>
+                    </div>
+                </div>
+            `;
+            container.appendChild(qDiv);
+        });
+    }
+
+    // 4. Відправка відповідей
+    document.getElementById('quizForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const answers = [];
+        
+        // Збираємо відповіді
+        currentQuestions.forEach(q => {
+            const selected = formData.get(`q_${q.id}`);
+            if (selected) {
+                answers.push({
+                    question_id: q.id,
+                    selected_option: selected
+                });
+            }
+        });
+
+        if (answers.length < currentQuestions.length) {
+            if(!confirm("Ви відповіли не на всі питання. Завершити тест?")) return;
+        }
+
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').textContent = "Перевірка...";
+
+        // Відправляємо на сервер
+        const payload = {
+            full_name: studentData.full_name,
+            group_name: studentData.group_name,
+            discipline_id: parseInt(studentData.discipline_id),
+            lecture_id: parseInt(studentData.lecture_id),
+            answers: answers
+        };
+
+        fetch('/api/submit_test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(result => {
+            // Показуємо результат
+            document.getElementById('quizForm').classList.add('d-none');
+            document.getElementById('resultBlock').classList.remove('d-none');
+            document.getElementById('scoreDisplay').textContent = `${result.score} / ${result.total}`;
+            localStorage.removeItem('studentData'); // Очищаємо
+        })
+        .catch(error => {
+            alert("Помилка при збереженні результату.");
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = "Завершити тест";
+        });
+    });
+});
+</script>
+</body>
+</html>
