@@ -1,122 +1,55 @@
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кабінет викладача - Результати</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; }
-        .table-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-top: 30px; }
-    </style>
-</head>
-<body>
-
-<div class="container-fluid">
-    <div class="container">
-        <div class="d-flex justify-content-between align-items-center mt-4">
-            <h2>Результати тестування студентів</h2>
-            <a href="/" class="btn btn-outline-primary">На головну</a>
-        </div>
-               <!-- Блок аналітики -->
-        <div class="row mb-4" id="analyticsRow">
-            <div class="col-md-4">
-                <div class="card text-center bg-primary text-white shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title">Всього тестів</h5>
-                        <h2 class="display-5 fw-bold" id="totalTests">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card text-center bg-success text-white shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title">Унікальних студентів</h5>
-                        <h2 class="display-5 fw-bold" id="uniqueStudents">0</h2>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card text-center bg-warning text-dark shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title">Середня успішність</h5>
-                        <h2 class="display-5 fw-bold" id="avgScore">0%</h2>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="table-container table-responsive">
-            <table class="table table-hover table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Дата</th>
-                        <th>Студент</th>
-                        <th>Група</th>
-                        <th>Дисципліна</th>
-                        <th>Лекція</th>
-                        <th>Бал</th>
-                    </tr>
-                </thead>
-                <tbody id="resultsBody">
-                    <tr>
-                        <td colspan="6" class="text-center">Завантаження даних...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+{% extends "base.html" %}
+{% block title %}Кабінет викладача{% endblock %}
+{% block nav_teacher %}aria-current="page"{% endblock %}
+{% block content %}
+<div class="page-head reveal">
+  <div>
+    <span class="chip"><svg class="i"><use href="#i-users"/></svg>Кабінет викладача</span>
+    <h1>Результати тестування</h1>
+  </div>
+  <span class="muted" id="updatedAt"></span>
 </div>
 
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-        // Завантажуємо аналітику
-    fetch('/api/analytics')
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('totalTests').textContent = data.total_tests;
-            document.getElementById('uniqueStudents').textContent = data.unique_students;
-            document.getElementById('avgScore').textContent = data.average_score_percent + '%';
-        })
-        .catch(error => console.error('Помилка завантаження аналітики:', error));
-        
-    fetch('/api/results')
-        .then(response => response.json())
-        .then(data => {
-            const tbody = document.getElementById('resultsBody');
-            tbody.innerHTML = ''; // Очищаємо заглушку
+<div class="glass filters reveal d1">
+  <label class="field"><span>Дисципліна</span><select id="fDiscipline"><option value="">Усі дисципліни</option></select></label>
+  <label class="field"><span>Лекція</span><select id="fLecture" disabled><option value="">Усі лекції</option></select></label>
+  <label class="field"><span>Група</span><select id="fGroup"><option value="">Усі групи</option></select></label>
+  <a class="btn ghost" id="exportBtn" href="/api/export.csv" download><svg class="i"><use href="#i-download"/></svg>CSV</a>
+</div>
 
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Ще немає жодного результату.</td></tr>';
-                return;
-            }
+<div class="bento-grid">
+  <div class="glass kpi accent span3 reveal d1"><svg class="i lg"><use href="#i-trending-up"/></svg><div class="label">Середній бал</div><div class="value" id="kAvg">–</div></div>
+  <div class="glass kpi span3 reveal d2"><svg class="i lg"><use href="#i-clipboard-check"/></svg><div class="label">Пройдено тестів</div><div class="value" id="kTests">–</div></div>
+  <div class="glass kpi span3 reveal d3"><svg class="i lg"><use href="#i-users"/></svg><div class="label">Студентів</div><div class="value" id="kStudents">–</div></div>
+  <div class="glass kpi span3 reveal d4"><svg class="i lg"><use href="#i-circle-check"/></svg><div class="label" id="kPassLabel">Склали</div><div class="value" id="kPass">–</div></div>
 
-            data.forEach(row => {
-                // Форматуємо дату (вона приходить у форматі YYYY-MM-DD HH:MM:SS)
-                const date = new Date(row.created_at).toLocaleString('uk-UA');
-                
-                // Визначаємо колір оцінки
-                let scoreColor = "text-danger"; // погано
-                const percentage = (row.score / row.total_questions) * 100;
-                if (percentage >= 75) scoreColor = "text-success"; // добре
-                else if (percentage >= 50) scoreColor = "text-warning"; // задовільно
+  <section class="glass pad span7 reveal d2">
+    <div class="card-title"><h3>Успішність за лекціями</h3><span class="muted">середній %, кількість тестів</span></div>
+    <div id="byLecture"></div>
+    <p class="legend">Пунктирна риска — поріг заліку.</p>
+  </section>
+  <section class="glass pad span5 reveal d3">
+    <div class="card-title"><h3>Успішність за групами</h3><span class="muted">середній %, кількість тестів</span></div>
+    <div id="byGroup"></div>
+  </section>
 
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${date}</td>
-                    <td class="fw-bold">${row.student_name}</td>
-                    <td>${row.group_name}</td>
-                    <td>${row.discipline_name}</td>
-                    <td>${row.lecture_title}</td>
-                    <td class="${scoreColor} fw-bold fs-5">${row.score} / ${row.total_questions}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        })
-        .catch(error => {
-            console.error('Помилка:', error);
-            document.getElementById('resultsBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Помилка завантаження даних.</td></tr>';
-        });
-});
-</script>
-</body>
-</html>
+  <section class="glass pad span12 reveal d3">
+    <div class="card-title"><h3>Динаміка за днями</h3><span class="muted">середній % за день</span></div>
+    <div id="timeline"></div>
+  </section>
+
+  <section class="glass span12 reveal d4">
+    <div class="table-tools">
+      <h3>Усі результати</h3>
+      <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Пошук за прізвищем" aria-label="Пошук за прізвищем"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Студент</th><th>Лекція</th><th>Дата</th><th>Результат</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="4" class="muted">Завантаження…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/teacher.js"></script>{% endblock %}
