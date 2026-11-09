@@ -1,6 +1,7 @@
 """Автоматичні тести застосунку (pytest). Запуск: pytest"""
 import os
 import sqlite3
+from pathlib import Path
 
 import db
 
@@ -49,7 +50,15 @@ def test_pages_are_served(client):
     assert client.get("/").status_code == 200
     assert "text/html" in client.get("/").headers["content-type"]
     assert client.get("/test").status_code == 200
-    assert client.get("/teacher").status_code == 200
+    teacher_page = client.get("/teacher")
+    assert teacher_page.status_code == 200
+    assert "/static/style.css?v=5" in teacher_page.text
+    assert "/static/teacher.js?v=3" in teacher_page.text
+    assert "/static/home.css?v=7" in client.get("/").text
+    home_page = client.get("/").text
+    assert "/static/index.js?v=5" in home_page
+    assert 'href="#registration">Почати тест' not in home_page
+    assert 'type="submit" class="btn primary block">Розпочати тест' in home_page
     assert client.get("/health").json() == {"status": "ok"}
 
 
@@ -60,6 +69,65 @@ def test_disciplines_and_lectures_are_listed(client):
     assert len(disciplines) >= 2
     lectures = client.get(f"/api/disciplines/{disciplines[0]['id']}/lectures").json()
     assert lectures and all(lec["question_count"] > 0 for lec in lectures)
+
+
+def test_teacher_can_upload_pdf_and_students_can_open_it(client):
+    discipline = client.get("/api/disciplines").json()[0]
+    response = client.post(
+        "/api/teacher/materials",
+        data={"discipline_id": str(discipline["id"]), "title": "Лекція 4"},
+        files={"file": ("lecture.pdf", b"%PDF-1.7\nsample lecture", "application/pdf")},
+    )
+    assert response.status_code == 200
+    material = response.json()
+
+    catalog = client.get("/api/catalog").json()
+    subject = next(item for item in catalog if item["id"] == discipline["id"])
+    assert {"id": material["id"], "title": "Лекція 4", "url": material["url"]} in subject["materials"]
+    quizzes = client.get(f"/api/disciplines/{discipline['id']}/lectures").json()
+    assert all(lecture["title"] != "Лекція 4" for lecture in quizzes)
+
+    pdf = client.get(material["url"])
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content == b"%PDF-1.7\nsample lecture"
+    assert client.get("/api/teacher/materials").json()[0]["title"] == "Лекція 4"
+    conn = raw_db()
+    stored_filename = conn.execute(
+        "SELECT stored_filename FROM uploaded_materials WHERE id = ?", (material["id"],)
+    ).fetchone()["stored_filename"]
+    conn.close()
+    stored_path = Path(os.environ["QUIZ_UPLOAD_DIR"]) / stored_filename
+    assert stored_path.is_file()
+    assert client.delete(f"/api/teacher/materials/{material['id']}").json() == {
+        "deleted": True,
+        "id": material["id"],
+    }
+    assert not stored_path.exists()
+    assert client.get("/api/teacher/materials").json() == []
+    assert client.get(f"/api/materials/{material['id']}/file").status_code == 404
+    assert client.get(f"/api/disciplines/{discipline['id']}/lectures").json() == quizzes
+    assert client.delete(f"/api/teacher/materials/{material['id']}").status_code == 404
+
+
+def test_material_upload_rejects_non_pdf_and_unknown_discipline(client):
+    discipline = client.get("/api/disciplines").json()[0]
+    payload = {"title": "Не PDF"}
+    assert client.post(
+        "/api/teacher/materials",
+        data={"discipline_id": str(discipline["id"]), **payload},
+        files={"file": ("notes.txt", b"not a pdf", "text/plain")},
+    ).status_code == 415
+    assert client.post(
+        "/api/teacher/materials",
+        data={"discipline_id": "999999", "title": "Lecture"},
+        files={"file": ("lecture.pdf", b"%PDF-1.7\ncontent", "application/pdf")},
+    ).status_code == 404
+    assert client.post(
+        "/api/teacher/materials",
+        data={"discipline_id": str(discipline["id"]), "title": "Invalid PDF"},
+        files={"file": ("lecture.pdf", b"not a pdf", "application/pdf")},
+    ).status_code == 415
 
 
 def test_each_question_has_valid_correct_answer(client):
@@ -214,10 +282,27 @@ def test_csv_export_neutralizes_formulas(client):
 
 def test_teacher_area_requires_password_when_configured(client, monkeypatch):
     monkeypatch.setenv("TEACHER_PASSWORD", "secret")
-    for url in ("/teacher", "/api/results", "/api/analytics", "/api/groups", "/api/export.csv"):
+    for url in ("/teacher", "/api/results", "/api/analytics", "/api/groups", "/api/export.csv",
+                "/api/teacher/materials"):
         assert client.get(url).status_code == 401, url
         assert client.get(url, auth=("teacher", "wrong")).status_code == 401, url
         assert client.get(url, auth=("teacher", "secret")).status_code == 200, url
+    discipline = client.get("/api/disciplines").json()[0]
+    upload = {
+        "data": {"discipline_id": str(discipline["id"]), "title": "Protected PDF"},
+        "files": {"file": ("lecture.pdf", b"%PDF-1.7\ncontent", "application/pdf")},
+    }
+    assert client.post("/api/teacher/materials", **upload).status_code == 401
+    created = client.post("/api/teacher/materials", auth=("teacher", "secret"), **upload)
+    assert created.status_code == 200
+    material_id = created.json()["id"]
+    assert client.delete(f"/api/teacher/materials/{material_id}").status_code == 401
+    assert client.delete(
+        f"/api/teacher/materials/{material_id}", auth=("teacher", "wrong")
+    ).status_code == 401
+    assert client.delete(
+        f"/api/teacher/materials/{material_id}", auth=("teacher", "secret")
+    ).status_code == 200
     # студентські сторінки лишаються відкритими
     assert client.get("/").status_code == 200
     assert client.get("/api/disciplines").status_code == 200

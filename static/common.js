@@ -1,5 +1,31 @@
 /* Спільні функції для всіх сторінок. Усі дані з сервера виводимо через textContent (захист від XSS). */
 
+/* ---------- Світла / темна тема ----------
+   Початкову тему ставить інлайн-скрипт у <head> (base.html). Тут — лише перемикач. */
+(function () {
+  const button = document.getElementById('themeToggle');
+  if (!button) return;
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelector('meta[name="color-scheme"]').setAttribute('content', theme);
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#f4f5fa' : '#0a0b0e');
+    button.setAttribute('aria-label', theme === 'light' ? 'Увімкнути темну тему' : 'Увімкнути світлу тему');
+    button.setAttribute('title', theme === 'light' ? 'Темна тема' : 'Світла тема');
+  }
+
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+
+  button.addEventListener('click', () => {
+    const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    // коротка плавна анімація лише на момент перемикання
+    document.documentElement.classList.add('theme-anim');
+    applyTheme(next);
+    try { localStorage.setItem('theme', next); } catch (e) { /* приватний режим */ }
+    setTimeout(() => document.documentElement.classList.remove('theme-anim'), 350);
+  });
+})();
+
 /** SVG-іконка зі спрайта в base.html: icon('check') */
 function icon(name, extraClass) {
   const NS = 'http://www.w3.org/2000/svg';

@@ -2,34 +2,28 @@
 {% block title %}Контроль знань — почати тест{% endblock %}
 {% block nav_test %}aria-current="page"{% endblock %}
 {% block content %}
+<link rel="stylesheet" href="/static/home.css?v=7">
 <div class="bento">
   <div class="bento-left">
     <section class="glass hero reveal">
       <div>
         <div class="chip"><svg class="i"><use href="#i-clipboard-check"/></svg>Онлайн-тестування</div>
-        <h1 style="margin-top:24px">Перевірте свої<br><span class="grad">знання</span></h1>
-        <p class="lead">Оберіть дисципліну та лекцію, щоб розпочати тест. Результат з'явиться одразу після завершення.</p>
+        <h1>Перевірте свої<br><span class="grad">знання</span></h1>
+        <p class="lead">Оберіть дисципліну та лекцію — і розпочніть тест. Навчайтеся у власному темпі та відстежуйте результат.</p>
       </div>
-      <a class="btn ghost" href="#registration">Почати тест <svg class="i"><use href="#i-arrow-right"/></svg></a>
     </section>
 
-    <div class="tiles">
-      <div class="glass tile reveal d1">
-        <svg class="i lg"><use href="#i-clock"/></svg>
-        <b>У зручному темпі</b>
-        <span>Проходьте тест без поспіху</span>
+    <section class="subjects reveal d1" aria-labelledby="subjectsTitle">
+      <div class="subjects-head">
+        <h2 id="subjectsTitle">Ваші предмети</h2>
+        <div class="subjects-nav">
+          <button type="button" class="nav-btn" id="subjPrev" aria-label="Попередні предмети"><svg class="i"><use href="#i-chevron-left"/></svg></button>
+          <button type="button" class="nav-btn" id="subjNext" aria-label="Наступні предмети"><svg class="i"><use href="#i-chevron-right"/></svg></button>
+        </div>
       </div>
-      <div class="glass tile reveal d2">
-        <svg class="i lg"><use href="#i-smartphone"/></svg>
-        <b>На будь-якому пристрої</b>
-        <span>Адаптивний інтерфейс</span>
-      </div>
-      <div class="glass tile reveal d3">
-        <svg class="i lg"><use href="#i-trending-up"/></svg>
-        <b>Миттєвий результат</b>
-        <span>Дізнайтеся свій бал одразу</span>
-      </div>
-    </div>
+      <div id="subjectsTrack" class="subjects-track" tabindex="0"></div>
+      <p class="subjects-hint">Гортайте предмети вбік, а лекції — усередині кожної картки.</p>
+    </section>
   </div>
 
   <section id="registration" class="glass reg reveal d2">
@@ -67,4 +61,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/index.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/index.js?v=5"></script>{% endblock %}

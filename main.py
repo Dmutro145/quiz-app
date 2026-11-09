@@ -21,8 +21,8 @@ from typing import Literal, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -35,6 +35,7 @@ DEFAULT_QUESTIONS = 10   # скільки питань у тесті
 MAX_QUESTIONS = 30
 PASS_PERCENT = 60        # поріг «склав» для аналітики
 SESSION_TTL_HOURS = 24   # скільки живе незавершений тест
+MAX_PDF_SIZE = 20 * 1024 * 1024
 
 
 @asynccontextmanager
@@ -145,6 +146,10 @@ def health():
     return {"status": "ok"}
 
 
+def materials_dir() -> Path:
+    return Path(os.environ.get("QUIZ_UPLOAD_DIR", str(BASE_DIR / "uploads" / "lectures")))
+
+
 # --------------------------------------------------------- довідники (публічні)
 
 @app.get("/api/disciplines")
@@ -169,6 +174,109 @@ def get_lectures(discipline_id: int, conn: sqlite3.Connection = Depends(get_conn
         (discipline_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+@app.post("/api/teacher/materials", dependencies=[Depends(require_teacher)])
+async def upload_material(
+    discipline_id: int = Form(...),
+    title: str = Form(..., min_length=1, max_length=120),
+    file: UploadFile = File(...),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    title = title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Вкажіть назву лекції")
+    discipline = conn.execute(
+        "SELECT id FROM disciplines WHERE id = ?", (discipline_id,)
+    ).fetchone()
+    if not discipline:
+        raise HTTPException(status_code=404, detail="Дисципліну не знайдено")
+    if not file.filename or Path(file.filename).suffix.lower() != ".pdf":
+        raise HTTPException(status_code=415, detail="Завантажте файл у форматі PDF")
+
+    content = await file.read(MAX_PDF_SIZE + 1)
+    if len(content) > MAX_PDF_SIZE:
+        raise HTTPException(status_code=413, detail="Розмір PDF не має перевищувати 20 МБ")
+    if not content.startswith(b"%PDF-"):
+        raise HTTPException(status_code=415, detail="Файл не є коректним PDF-документом")
+
+    directory = materials_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    stored_filename = f"{uuid.uuid4().hex}.pdf"
+    destination = directory / stored_filename
+    destination.write_bytes(content)
+    try:
+        cursor = conn.execute(
+            """INSERT INTO uploaded_materials (discipline_id, title, stored_filename)
+               VALUES (?, ?, ?)""",
+            (discipline_id, title, stored_filename),
+        )
+        conn.commit()
+    except sqlite3.Error:
+        destination.unlink(missing_ok=True)
+        raise
+
+    return {
+        "id": cursor.lastrowid,
+        "discipline_id": discipline_id,
+        "title": title,
+        "url": f"/api/materials/{cursor.lastrowid}/file",
+    }
+
+
+@app.get("/api/teacher/materials", dependencies=[Depends(require_teacher)])
+def get_uploaded_materials(conn: sqlite3.Connection = Depends(get_conn)):
+    rows = conn.execute(
+        """SELECT m.id, m.discipline_id, d.name AS discipline_name, m.title, m.uploaded_at
+           FROM uploaded_materials m
+           JOIN disciplines d ON d.id = m.discipline_id
+           ORDER BY d.name, m.uploaded_at DESC, m.id DESC"""
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "discipline_id": row["discipline_id"],
+            "discipline_name": row["discipline_name"],
+            "title": row["title"],
+            "uploaded_at": row["uploaded_at"],
+            "url": f"/api/materials/{row['id']}/file",
+        }
+        for row in rows
+    ]
+
+
+@app.delete("/api/teacher/materials/{material_id}", dependencies=[Depends(require_teacher)])
+def delete_uploaded_material(material_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    material = conn.execute(
+        "SELECT stored_filename FROM uploaded_materials WHERE id = ?", (material_id,)
+    ).fetchone()
+    if not material:
+        raise HTTPException(status_code=404, detail="Завантажену лекцію не знайдено")
+
+    conn.execute("DELETE FROM uploaded_materials WHERE id = ?", (material_id,))
+    conn.commit()
+    (materials_dir() / material["stored_filename"]).unlink(missing_ok=True)
+    return {"deleted": True, "id": material_id}
+
+
+@app.get("/api/materials/{material_id}/file")
+def get_material_file(material_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    row = conn.execute(
+        "SELECT title, stored_filename FROM uploaded_materials WHERE id = ?",
+        (material_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Лекцію не знайдено")
+    path = materials_dir() / row["stored_filename"]
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Файл лекції недоступний")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=path.name,
+        content_disposition_type="inline",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
 
 
 # ------------------------------------------------------------ проходження тесту
@@ -447,3 +555,45 @@ def export_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="results.csv"'},
     )
+
+@app.get("/api/catalog")
+def get_catalog(conn: sqlite3.Connection = Depends(get_conn)):
+    """Дисципліни з тестами та завантаженими матеріалами для карток на головній."""
+    rows = conn.execute(
+        """SELECT d.id AS d_id, d.name AS d_name, l.id AS l_id, l.title AS l_title,
+                  COUNT(q.id) AS question_count
+           FROM disciplines d
+           JOIN lectures l ON l.discipline_id = d.id
+           JOIN questions q ON q.lecture_id = l.id
+           GROUP BY l.id
+           ORDER BY d.name, l.id"""
+    ).fetchall()
+    catalog: dict = {}
+    for r in rows:
+        item = catalog.setdefault(
+            r["d_id"],
+            {"id": r["d_id"], "name": r["d_name"], "lectures": [], "materials": []},
+        )
+        item["lectures"].append(
+            {"id": r["l_id"], "title": r["l_title"], "question_count": r["question_count"]}
+        )
+
+    materials = conn.execute(
+        """SELECT d.id AS d_id, d.name AS d_name, m.id AS m_id, m.title AS m_title
+           FROM uploaded_materials m
+           JOIN disciplines d ON d.id = m.discipline_id
+           ORDER BY d.name, m.uploaded_at DESC, m.id DESC"""
+    ).fetchall()
+    for row in materials:
+        item = catalog.setdefault(
+            row["d_id"],
+            {"id": row["d_id"], "name": row["d_name"], "lectures": [], "materials": []},
+        )
+        item["materials"].append(
+            {
+                "id": row["m_id"],
+                "title": row["m_title"],
+                "url": f"/api/materials/{row['m_id']}/file",
+            }
+        )
+    return list(catalog.values())

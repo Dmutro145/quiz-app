@@ -1,0 +1,69 @@
+/* ================= Головна: предмети та лекції ================= */
+.bento-left { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; min-width: 0; min-height: 0; }
+.hero { display: flex; flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 20px 24px; min-height: 0; }
+.hero h1 { margin-top: 12px; font-size: clamp(1.8rem, 2.8vw, 2.3rem); line-height: 1.05; }
+.hero .lead { margin-top: 8px; font-size: .9rem; max-width: 420px; }
+.hero .btn { flex: none; }
+
+.subjects { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.subjects-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; min-height: 30px; }
+.subjects-head h2 { font-size: 1.1rem; }
+.subjects-nav { display: flex; align-items: center; gap: 8px; }
+.nav-btn { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border-radius: 9px; color: var(--text); background: var(--panel); border: 1px solid var(--line); cursor: pointer; transition: background .15s, opacity .15s; }
+.nav-btn[hidden] { display: none; }
+.nav-btn:hover:not(:disabled) { background: var(--panel-hover); }
+.nav-btn:disabled { opacity: .35; cursor: default; }
+
+/* Стрічка предметів: сітка зі спільними рядками (subgrid), тому назви, лінії й списки лекцій вирівняні в усіх картках */
+.subjects-track {
+  flex: 1; min-height: 340px; padding-bottom: 14px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 16px) / 2);
+  grid-template-rows: auto auto auto minmax(0, 1fr); column-gap: 16px;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .28) var(--line);
+}
+.subjects-track::-webkit-scrollbar { height: 5px; }
+.subjects-track::-webkit-scrollbar-track { background: var(--line); border-radius: 99px; }
+.subjects-track::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .28); border-radius: 99px; }
+.subjects-track > p { grid-row: 1; }
+.subjects-hint { margin: 4px 0 0; font-size: .76rem; color: var(--faint); }
+
+.subject { grid-row: span 4; display: grid; grid-template-rows: subgrid; row-gap: 0; min-width: 0; padding: 14px; scroll-snap-align: start; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); transition: border-color .2s, background .2s; }
+.subject.is-active { border-color: rgba(124, 130, 255, .55); background: linear-gradient(180deg, rgba(94, 110, 255, .12), var(--panel)); }
+.subject-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.subject-num { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; font-size: .8rem; font-weight: 600; color: #aab2ff; background: var(--accent-soft); }
+.subject-state { display: inline-flex; font-size: .72rem; font-weight: 500; color: #aab2ff; }
+.subject-state .i { color: #8a94ff; }
+.subject-name { font-size: 1rem; line-height: 1.2; overflow-wrap: anywhere; }
+.subject-meta { margin: 4px 0 0; padding-bottom: 12px; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--line); }
+.lec-list { min-height: 0; max-height: 196px; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .22) transparent; }
+.lec-list::-webkit-scrollbar { width: 4px; }
+.lec-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 99px; }
+.subject-empty { padding: 10px 8px; color: var(--faint); font-size: .78rem; }
+.lec { flex: none; display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; text-align: left; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; transition: background .15s, border-color .15s; }
+.lec:hover { background: var(--panel-hover); border-color: var(--line-strong); }
+.lec .i { flex: none; color: var(--muted); }
+.lec-text { min-width: 0; flex: 1; }
+.lec-text b { display: block; font-size: .86rem; font-weight: 500; overflow-wrap: anywhere; }
+.lec-text small { display: block; font-size: .72rem; color: var(--faint); }
+.lec.is-active { border-color: rgba(124, 130, 255, .6); background: rgba(94, 110, 255, .16); }
+.lec.is-active .i { color: #aab2ff; }
+
+/* Комп'ютер: сторінка рівно по висоті вікна, списки лекцій прокручуються всередині карток */
+@media (min-width: 1025px) {
+  main.wrap { padding-bottom: 24px; }
+  .bento { height: calc(100vh - var(--topbar) - 48px); height: calc(100dvh - var(--topbar) - 48px); min-height: 600px; }
+  .bento-left { grid-template-rows: 184px minmax(0, 1fr); }
+  .hero { height: 184px; }
+  .hero h1 br { display: none; }
+  .hero h1 .grad { margin-left: .18em; }
+  .subjects-track { min-height: 0; }
+  .lec-list { max-height: none; }
+}
+@media (max-width: 1024px) {
+  .subjects-track { grid-auto-columns: calc((100% - 16px) / 2); column-gap: 16px; }
+}
+@media (max-width: 699px) {
+  .hero { flex-direction: column; align-items: flex-start; }
+  .subjects-track { grid-auto-columns: 86%; min-height: 0; }
+}

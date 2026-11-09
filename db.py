@@ -31,6 +31,14 @@ CREATE TABLE IF NOT EXISTS lectures (
     UNIQUE (discipline_id, title)
 );
 
+CREATE TABLE IF NOT EXISTS uploaded_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discipline_id INTEGER NOT NULL REFERENCES disciplines(id),
+    title TEXT NOT NULL,
+    stored_filename TEXT NOT NULL UNIQUE,
+    uploaded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     lecture_id INTEGER NOT NULL REFERENCES lectures(id),

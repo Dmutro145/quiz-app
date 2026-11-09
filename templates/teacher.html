@@ -2,6 +2,52 @@
 {% block title %}Кабінет викладача{% endblock %}
 {% block nav_teacher %}aria-current="page"{% endblock %}
 {% block content %}
+<section class="glass materials-upload reveal" aria-labelledby="uploadTitle">
+  <div class="materials-heading">
+    <div>
+      <span class="chip"><svg class="i"><use href="#i-book-open"/></svg>Навчальні матеріали</span>
+      <h1 id="uploadTitle">Завантажити лекцію</h1>
+      <p class="muted">Додайте PDF, щоб студенти могли відкрити його на сторінці предметів.</p>
+    </div>
+  </div>
+  <form id="materialForm" class="material-form">
+    <label class="field">
+      <span>Предмет</span>
+      <select id="materialDiscipline" name="discipline_id" required>
+        <option value="">Завантаження предметів…</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Назва лекції</span>
+      <input id="materialTitle" name="title" type="text" maxlength="120" placeholder="Наприклад, Лекція 4. Визначений інтеграл" required>
+    </label>
+    <label class="field material-file-field">
+      <span>PDF-файл (до 20 МБ)</span>
+      <span class="file-drop" id="fileDrop">
+        <svg class="i lg"><use href="#i-upload"/></svg>
+        <span id="fileName">Оберіть PDF-файл або перетягніть його сюди</span>
+        <input id="materialFile" name="file" type="file" accept=".pdf,application/pdf" required>
+      </span>
+    </label>
+    <div class="material-actions">
+      <div id="materialMessage" class="material-message muted" role="status" aria-live="polite">Оберіть предмет, додайте назву та PDF-файл.</div>
+      <button class="btn primary" id="uploadButton" type="submit"><svg class="i"><use href="#i-upload"/></svg>Завантажити та опублікувати</button>
+    </div>
+  </form>
+</section>
+
+<section class="materials-library reveal d1" aria-labelledby="materialsTitle">
+  <div class="materials-library-head">
+    <div>
+      <h2 id="materialsTitle">Завантажені лекції</h2>
+      <p class="muted">Опубліковані матеріали за предметами</p>
+    </div>
+  </div>
+  <div id="uploadedMaterials" class="uploaded-materials">
+    <p class="muted">Завантаження лекцій…</p>
+  </div>
+</section>
+
 <div class="page-head reveal">
   <div>
     <span class="chip"><svg class="i"><use href="#i-users"/></svg>Кабінет викладача</span>
@@ -52,4 +98,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/teacher.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/teacher.js?v=3"></script>{% endblock %}

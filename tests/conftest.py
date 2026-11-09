@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 def client(tmp_path, monkeypatch):
     """Клієнт із чистою тимчасовою БД; питання завантажуються з data/*.csv при старті."""
     monkeypatch.setenv("QUIZ_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("QUIZ_UPLOAD_DIR", str(tmp_path / "uploads"))
     monkeypatch.delenv("TEACHER_PASSWORD", raising=False)
     monkeypatch.delenv("APPS_SCRIPT_URL", raising=False)
     from main import app
