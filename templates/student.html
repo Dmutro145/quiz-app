@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Студент — Контроль знань{% endblock %}
+{% block nav_student %}aria-current="page"{% endblock %}
+
+{% block content %}
+<!-- ===== ГОСТЬ (не авторизований) ===== -->
+<div id="guestView">
+  <section class="glass student-hero reveal">
+    <div class="student-hero-left">
+      <span class="chip">Особистий кабінет</span>
+      <h1>Усі ваші результати.<br>В одному місці.</h1>
+      <p class="muted">Увійдіть, щоб переглядати оцінки з предметів, історію тестувань і свій навчальний прогрес.</p>
+      <div class="student-hero-note">
+        <strong>Лише ваші дані</strong>
+        <span class="muted">Результати доступні тільки після входу у ваш обліковий запис.</span>
+      </div>
+    </div>
+    <div class="student-hero-right">
+      <h2>Вхід для студентів</h2>
+      <p class="muted small">Використайте дані, які надав викладач.</p>
+      <form id="loginForm" class="student-login-form">
+        <label class="field">
+          <span>Логін</span>
+          <input id="loginInput" type="text" autocomplete="username" placeholder="Введіть свій логін" required>
+        </label>
+        <label class="field">
+          <span>Пароль</span>
+          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Введіть пароль" required>
+        </label>
+        <div class="login-actions">
+          <button type="button" class="link-btn" id="forgotBtn">Забули пароль?</button>
+          <button type="submit" class="btn primary" id="loginBtn">Увійти до кабінету →</button>
+        </div>
+        <p id="loginError" class="form-error" hidden></p>
+      </form>
+    </div>
+  </section>
+
+  <section class="student-subjects reveal d1">
+    <h2>Ваші предмети</h2>
+    <p class="muted">Навчальні матеріали залишаються доступними без входу.</p>
+    <div id="guestSubjects" class="subject-cards">
+      <p class="muted">Завантаження…</p>
+    </div>
+  </section>
+</div>
+
+<!-- ===== АВТОРИЗОВАНИЙ ===== -->
+<div id="authView" hidden>
+  <div class="page-head reveal">
+    <div>
+      <span class="chip">Особистий кабінет</span>
+      <h1>Мої результати</h1>
+      <p class="muted" id="studentMeta">—</p>
+    </div>
+    <button type="button" class="btn ghost" id="logoutBtn">Вийти з кабінету</button>
+  </div>
+
+  <div class="bento-grid student-kpis reveal d1">
+    <div class="glass kpi">
+      <div class="label">Предметів</div>
+      <div class="value" id="kSubjects">–</div>
+      <small class="muted" id="kSubjectsSub"></small>
+    </div>
+    <div class="glass kpi">
+      <div class="label">Пройдено тестів</div>
+      <div class="value" id="kTests">–</div>
+      <small class="muted">Завершені спроби</small>
+    </div>
+    <div class="glass kpi accent">
+      <div class="label">Середній результат</div>
+      <div class="value" id="kAvg">–</div>
+      <small class="muted">За всіма тестами</small>
+    </div>
+    <div class="glass kpi">
+      <div class="label">Найкращий результат</div>
+      <div class="value" id="kBest">–</div>
+      <small class="muted" id="kBestSub"></small>
+    </div>
+  </div>
+
+  <section class="reveal d2">
+    <div class="card-title">
+      <h3>Успішність за предметами</h3>
+      <span class="muted">Середній бал за всіма спробами</span>
+    </div>
+    <div id="byDiscipline" class="discipline-bars"></div>
+  </section>
+
+  <section class="glass pad reveal d3">
+    <div class="table-tools">
+      <h3>Історія тестувань</h3>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Предмет / лекція</th>
+            <th>Дата</th>
+            <th>Спроба</th>
+            <th>Результат</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody id="historyRows">
+          <tr><td colspan="5" class="muted">Завантаження…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/student.js?v=1"></script>
+{% endblock %}

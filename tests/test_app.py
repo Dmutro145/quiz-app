@@ -64,6 +64,35 @@ def test_pages_are_served(client):
 
 # --------------------------------------------------------------- база та довідники
 
+def test_init_db_migrates_legacy_results_table(tmp_path, monkeypatch):
+    database = tmp_path / "legacy.db"
+    conn = sqlite3.connect(database)
+    conn.execute(
+        """CREATE TABLE results (
+            id INTEGER PRIMARY KEY,
+            student_name TEXT NOT NULL,
+            group_name TEXT NOT NULL,
+            discipline_id INTEGER NOT NULL,
+            lecture_id INTEGER NOT NULL,
+            score INTEGER NOT NULL,
+            total_questions INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("QUIZ_DB_PATH", str(database))
+
+    db.init_db()
+
+    conn = sqlite3.connect(database)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(results)")}
+    indexes = {row[1] for row in conn.execute("PRAGMA index_list(results)")}
+    conn.close()
+    assert "student_id" in columns
+    assert "idx_results_student" in indexes
+
+
 def test_disciplines_and_lectures_are_listed(client):
     disciplines = client.get("/api/disciplines").json()
     assert len(disciplines) >= 2

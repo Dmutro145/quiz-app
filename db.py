@@ -1,6 +1,6 @@
-"""База даних SQLite: схема, невеликі міграції та імпорт питань із CSV.
+"""База даних SQLite: схема, міграції та імпорт питань із CSV.
 
-Запуск вручну (створює таблиці й докидає питання з data/*.csv, нічого не видаляючи):
+Запуск:
     python db.py
 """
 import csv
@@ -14,7 +14,6 @@ DATA_DIR = BASE_DIR / "data"
 
 
 def db_path() -> str:
-    """Шлях до файлу БД. Можна змінити змінною середовища QUIZ_DB_PATH."""
     return os.environ.get("QUIZ_DB_PATH", str(BASE_DIR / "quiz.db"))
 
 
@@ -50,6 +49,15 @@ CREATE TABLE IF NOT EXISTS questions (
     correct TEXT NOT NULL CHECK (correct IN ('A','B','C','D'))
 );
 
+CREATE TABLE IF NOT EXISTS students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    login TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    group_name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_name TEXT NOT NULL,
@@ -59,10 +67,10 @@ CREATE TABLE IF NOT EXISTS results (
     score INTEGER NOT NULL,
     total_questions INTEGER NOT NULL,
     duration_sec INTEGER,
+    student_id INTEGER REFERENCES students(id),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
--- Одна сесія = один згенерований тест. Токен можна використати лише раз.
 CREATE TABLE IF NOT EXISTS test_sessions (
     token TEXT PRIMARY KEY,
     lecture_id INTEGER NOT NULL REFERENCES lectures(id),
@@ -71,8 +79,16 @@ CREATE TABLE IF NOT EXISTS test_sessions (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
+CREATE TABLE IF NOT EXISTS student_sessions (
+    token_hash TEXT PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_questions_lecture ON questions(lecture_id);
 CREATE INDEX IF NOT EXISTS idx_results_lecture ON results(lecture_id);
+CREATE INDEX IF NOT EXISTS idx_student_sessions_student ON student_sessions(student_id);
 """
 
 
@@ -84,16 +100,21 @@ def connect() -> sqlite3.Connection:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Дозволяє працювати зі старою базою, створеною першою версією застосунку."""
+    """Підтримка старих баз."""
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
     if "duration_sec" not in columns:
         conn.execute("ALTER TABLE results ADD COLUMN duration_sec INTEGER")
+    if "student_id" not in columns:
+        conn.execute(
+            "ALTER TABLE results ADD COLUMN student_id INTEGER REFERENCES students(id)"
+        )
 
 
 def init_db() -> None:
     with closing(connect()) as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_results_student ON results(student_id)")
         conn.commit()
 
 
@@ -102,7 +123,6 @@ def _clean(row: dict, key: str) -> str:
 
 
 def _import_row(conn: sqlite3.Connection, row: dict) -> None:
-    """Додає або оновлює одне питання. Кидає ValueError для некоректного рядка."""
     discipline = _clean(row, "discipline")
     lecture = _clean(row, "lecture")
     text = _clean(row, "question")
@@ -131,13 +151,14 @@ def _import_row(conn: sqlite3.Connection, row: dict) -> None:
     ).fetchone()["id"]
 
     existing = conn.execute(
-        "SELECT id FROM questions WHERE lecture_id = ? AND text = ?", (lecture_id, text)
+        "SELECT id FROM questions WHERE lecture_id = ? AND text = ?",
+        (lecture_id, text),
     ).fetchone()
     if existing:
         conn.execute(
             """UPDATE questions
-               SET option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct = ?
-               WHERE id = ?""",
+               SET option_a=?, option_b=?, option_c=?, option_d=?, correct=?
+               WHERE id=?""",
             (*options, correct, existing["id"]),
         )
     else:
@@ -150,7 +171,6 @@ def _import_row(conn: sqlite3.Connection, row: dict) -> None:
 
 
 def load_csv(path) -> int:
-    """Імпортує питання з CSV. Повторний запуск не створює дублікатів."""
     count = 0
     with closing(connect()) as conn:
         with open(path, encoding="utf-8-sig", newline="") as f:
@@ -158,7 +178,7 @@ def load_csv(path) -> int:
                 try:
                     _import_row(conn, row)
                 except ValueError as error:
-                    print(f"⚠️  {Path(path).name}, рядок {line_no} пропущено: {error}")
+                    print(f"⚠️  {Path(path).name}, рядок {line_no}: {error}")
                     continue
                 count += 1
         conn.commit()

@@ -20,6 +20,11 @@ from pathlib import Path
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import hashlib
+import hmac
+import time
+from fastapi import Cookie
+
 import requests
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -36,6 +41,12 @@ MAX_QUESTIONS = 30
 PASS_PERCENT = 60        # поріг «склав» для аналітики
 SESSION_TTL_HOURS = 24   # скільки живе незавершений тест
 MAX_PDF_SIZE = 20 * 1024 * 1024
+STUDENT_SESSION_DAYS = 7
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCK_MINUTES = 5
+
+# Захист від перебору паролів (in-memory)
+_login_attempts: dict[str, list[float]] = {}
 
 
 @asynccontextmanager
@@ -76,6 +87,80 @@ def require_teacher(credentials: Optional[HTTPBasicCredentials] = Depends(securi
             headers={"WWW-Authenticate": 'Basic realm="teacher"'},  # заголовок лише ASCII
         )
 
+def hash_password(password: str) -> str:
+    """scrypt. Формат: salt_hex$hash_hex"""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.scrypt(
+        password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32
+    )
+    return f"{salt.hex()}${dk.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        salt_hex, hash_hex = stored.split("$", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        dk = hashlib.scrypt(
+            password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1, dklen=32
+        )
+        return hmac.compare_digest(dk, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_student_session(conn: sqlite3.Connection, student_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    expires = utc_iso(datetime.now(timezone.utc) + timedelta(days=STUDENT_SESSION_DAYS))
+    conn.execute(
+        "INSERT INTO student_sessions (token_hash, student_id, expires_at) VALUES (?, ?, ?)",
+        (hash_token(token), student_id, expires),
+    )
+    conn.commit()
+    return token
+
+
+def get_current_student(
+    conn: sqlite3.Connection = Depends(get_conn),
+    student_session: Optional[str] = Cookie(default=None),
+):
+    """Повертає dict студента або None."""
+    if not student_session:
+        return None
+    now = utc_iso(datetime.now(timezone.utc))
+    row = conn.execute(
+        """SELECT s.id, s.login, s.full_name, s.group_name
+           FROM student_sessions ss
+           JOIN students s ON s.id = ss.student_id
+           WHERE ss.token_hash = ? AND ss.expires_at > ?""",
+        (hash_token(student_session), now),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def require_student(student=Depends(get_current_student)):
+    if not student:
+        raise HTTPException(status_code=401, detail="Потрібен вхід студента")
+    return student
+
+
+def check_login_rate(login: str) -> None:
+    now = time.time()
+    attempts = [t for t in _login_attempts.get(login, []) if now - t < LOGIN_LOCK_MINUTES * 60]
+    _login_attempts[login] = attempts
+    if len(attempts) >= LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Забагато спроб. Спробуйте через {LOGIN_LOCK_MINUTES} хв.",
+        )
+
+
+def record_failed_login(login: str) -> None:
+    _login_attempts.setdefault(login, []).append(time.time())
 
 def now_local() -> datetime:
     try:
@@ -140,6 +225,9 @@ def test_page(request: Request):
 def teacher_page(request: Request):
     return templates.TemplateResponse(request=request, name="teacher.html")
 
+@app.get("/student", response_class=HTMLResponse)
+def student_page(request: Request):
+    return templates.TemplateResponse(request=request, name="student.html")
 
 @app.get("/health")
 def health():
@@ -277,6 +365,182 @@ def get_material_file(material_id: int, conn: sqlite3.Connection = Depends(get_c
         content_disposition_type="inline",
         headers={"X-Content-Type-Options": "nosniff"},
     )
+
+# --------------------------------------------------------- студенти
+
+class StudentCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=120)
+    group_name: str = Field(..., min_length=1, max_length=40)
+    login: str = Field(..., min_length=3, max_length=40)
+
+
+class StudentLogin(BaseModel):
+    login: str
+    password: str
+
+
+@app.post("/api/student/login")
+def student_login(
+    body: StudentLogin,
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    login = body.login.strip().lower()
+    check_login_rate(login)
+
+    row = conn.execute(
+        "SELECT id, password_hash, full_name, group_name FROM students WHERE login = ?",
+        (login,),
+    ).fetchone()
+
+    if not row or not verify_password(body.password, row["password_hash"]):
+        record_failed_login(login)
+        raise HTTPException(status_code=401, detail="Невірний логін або пароль")
+
+    _login_attempts.pop(login, None)
+    token = create_student_session(conn, row["id"])
+
+    response.set_cookie(
+        key="student_session",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=STUDENT_SESSION_DAYS * 24 * 3600,
+        secure=bool(os.environ.get("RENDER")),
+    )
+    return {
+        "id": row["id"],
+        "full_name": row["full_name"],
+        "group_name": row["group_name"],
+        "login": login,
+    }
+
+
+@app.post("/api/student/logout")
+def student_logout(
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_conn),
+    student_session: Optional[str] = Cookie(default=None),
+):
+    if student_session:
+        conn.execute(
+            "DELETE FROM student_sessions WHERE token_hash = ?",
+            (hash_token(student_session),),
+        )
+        conn.commit()
+    response.delete_cookie("student_session")
+    return {"ok": True}
+
+
+@app.get("/api/student/me")
+def student_me(student=Depends(get_current_student)):
+    if not student:
+        return {"authenticated": False}
+    return {"authenticated": True, **student}
+
+
+@app.get("/api/student/results")
+def student_results(
+    student=Depends(require_student),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    rows = conn.execute(
+        """SELECT r.id, r.score, r.total_questions, r.duration_sec, r.created_at,
+                  d.name AS discipline_name, l.title AS lecture_title
+           FROM results r
+           JOIN disciplines d ON d.id = r.discipline_id
+           JOIN lectures l ON l.id = r.lecture_id
+           WHERE r.student_id = ?
+           ORDER BY r.created_at DESC""",
+        (student["id"],),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/student/stats")
+def student_stats(
+    student=Depends(require_student),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    row = conn.execute(
+        """SELECT COUNT(*) AS tests,
+                  AVG(score * 100.0 / total_questions) AS avg_pct
+           FROM results
+           WHERE student_id = ? AND total_questions > 0""",
+        (student["id"],),
+    ).fetchone()
+    return {
+        "tests": row["tests"] or 0,
+        "average_percent": round(row["avg_pct"] or 0, 1),
+    }
+
+
+@app.get("/api/teacher/students", dependencies=[Depends(require_teacher)])
+def list_students(conn: sqlite3.Connection = Depends(get_conn)):
+    rows = conn.execute(
+        """SELECT id, login, full_name, group_name, created_at
+           FROM students ORDER BY group_name, full_name"""
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/teacher/students", dependencies=[Depends(require_teacher)])
+def create_student(body: StudentCreate, conn: sqlite3.Connection = Depends(get_conn)):
+    login = body.login.strip().lower()
+    full_name = normalize_name(body.full_name)
+    group_name = normalize_group(body.group_name)
+
+    password = secrets.token_urlsafe(8)
+    try:
+        cursor = conn.execute(
+            """INSERT INTO students (login, password_hash, full_name, group_name)
+               VALUES (?, ?, ?, ?)""",
+            (login, hash_password(password), full_name, group_name),
+        )
+        student_id = cursor.lastrowid
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Такий логін уже існує")
+
+    # підтягуємо старі результати за ПІБ + групою
+    conn.execute(
+        """UPDATE results SET student_id = ?
+           WHERE student_id IS NULL
+             AND lower(student_name) = lower(?)
+             AND upper(replace(group_name, ' ', '')) = upper(replace(?, ' ', ''))""",
+        (student_id, full_name, group_name),
+    )
+    conn.commit()
+
+    return {
+        "id": student_id,
+        "login": login,
+        "full_name": full_name,
+        "group_name": group_name,
+        "password": password,
+    }
+
+
+@app.post("/api/teacher/students/{student_id}/reset-password", dependencies=[Depends(require_teacher)])
+def reset_student_password(student_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    if not conn.execute("SELECT id FROM students WHERE id = ?", (student_id,)).fetchone():
+        raise HTTPException(status_code=404, detail="Студента не знайдено")
+    password = secrets.token_urlsafe(8)
+    conn.execute(
+        "UPDATE students SET password_hash = ? WHERE id = ?",
+        (hash_password(password), student_id),
+    )
+    conn.execute("DELETE FROM student_sessions WHERE student_id = ?", (student_id,))
+    conn.commit()
+    return {"password": password}
+
+
+@app.delete("/api/teacher/students/{student_id}", dependencies=[Depends(require_teacher)])
+def delete_student(student_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    conn.execute("DELETE FROM student_sessions WHERE student_id = ?", (student_id,))
+    conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
+    conn.commit()
+    return {"deleted": True}
 
 
 # ------------------------------------------------------------ проходження тесту
