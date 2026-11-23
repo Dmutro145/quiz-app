@@ -38,16 +38,44 @@
         container.innerHTML = '<p class="muted">Поки немає доступних предметів.</p>';
         return;
       }
-      container.innerHTML = '';
+          container.replaceChildren();
+      const plural = (n) => {
+        const m10 = n % 10, m100 = n % 100;
+        if (m10 === 1 && m100 !== 11) return `${n} завантажена лекція`;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return `${n} завантажені лекції`;
+        return `${n} завантажених лекцій`;
+      };
       catalog.forEach((d, i) => {
-        const card = document.createElement('article');
-        card.className = 'subject-card';
-        card.innerHTML = `
-          <div class="subject-num">${i + 1}</div>
-          <h3>${d.name}</h3>
-          <p class="muted">${(d.materials || []).length} завантажені лекції</p>
-          <a class="btn ghost" href="/">Переглянути матеріали →</a>
-        `;
+        const materials = d.materials || [];
+        const list = h('div', { class: 'lec-list' },
+          materials.length
+            ? materials.map((m) => h('a', {
+                class: 'lec material-link', href: m.url, target: '_blank', rel: 'noopener noreferrer',
+              },
+                icon('file-text'),
+                h('span', { class: 'lec-text' },
+                  h('b', { text: m.title }),
+                  h('small', { text: 'PDF · Відкрити лекцію' })),
+                h('span', { class: 'material-open', text: 'Відкрити' })))
+            : h('p', { class: 'subject-empty', text: 'Лекції з’являться після завантаження PDF.' }));
+        const collapse = h('button', {
+          type: 'button',
+          class: 'subject-collapse',
+          'aria-label': `Розгорнути лекції предмета ${d.name}`,
+          'aria-expanded': 'false',
+        }, icon('chevron-right'));
+        const card = h('article', { class: 'subject-card is-collapsed mobile-subject-collapsed' },
+          h('div', { class: 'subject-card-head' },
+            h('div', { class: 'subject-num', text: String(i + 1) }),
+            h('h3', { text: d.name }),
+            collapse),
+          h('p', { class: 'muted subject-count', text: plural(materials.length) }),
+          list);
+        collapse.addEventListener('click', () => {
+          const collapsed = card.classList.toggle('is-collapsed');
+          collapse.setAttribute('aria-expanded', String(!collapsed));
+          collapse.setAttribute('aria-label', `${collapsed ? 'Розгорнути' : 'Згорнути'} лекції предмета ${d.name}`);
+        });
         container.appendChild(card);
       });
       const cta = document.createElement('article');

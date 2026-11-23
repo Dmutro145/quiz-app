@@ -52,11 +52,14 @@ def test_pages_are_served(client):
     assert client.get("/test").status_code == 200
     teacher_page = client.get("/teacher")
     assert teacher_page.status_code == 200
-    assert "/static/style.css?v=5" in teacher_page.text
-    assert "/static/teacher.js?v=3" in teacher_page.text
-    assert "/static/home.css?v=7" in client.get("/").text
+    assert "/static/style.css?v=14" in teacher_page.text
+    test_page = client.get("/test").text
+    assert "/static/test.js?v=3" in test_page
+    assert "/static/teacher.js?v=7" in teacher_page.text
+    assert "/static/home.css?v=9" in client.get("/").text
     home_page = client.get("/").text
-    assert "/static/index.js?v=5" in home_page
+    assert "/static/index.js?v=6" in home_page
+    assert "/static/student.js?v=4" in client.get("/student").text
     assert 'href="#registration">Почати тест' not in home_page
     assert 'type="submit" class="btn primary block">Розпочати тест' in home_page
     assert client.get("/health").json() == {"status": "ok"}

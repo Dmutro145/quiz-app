@@ -11,8 +11,10 @@
   let answers = {};          // question_id -> початкова літера варіанта (A–D)
   let index = 0;
   let startedAt = 0;
+  const TEST_DURATION_SECONDS = 10 * 60;
   let timerId = null;
   let busy = false;
+  let elapsedSeconds = 0;
 
   $('studentInfo').textContent = `${student.full_name} · ${student.group_name}`;
   $('lectureTitle').textContent = student.lecture_title;
@@ -28,7 +30,16 @@
   }
 
   // ---------- таймер
-  function tick() { $('timer').textContent = formatDuration(Math.floor((Date.now() - startedAt) / 1000)); }
+  function tick() {
+    elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    const remaining = Math.max(TEST_DURATION_SECONDS - elapsedSeconds, 0);
+    $('timer').textContent = formatDuration(remaining);
+    $('timer').closest('.timer').classList.toggle('low-time', remaining > 0 && remaining <= 60);
+    if (remaining === 0) {
+      stopTimer();
+      finish(true);
+    }
+  }
   function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
 
   // ---------- старт
@@ -40,6 +51,8 @@
         token = data.token;
         questions = data.questions;
         startedAt = Date.now();
+        elapsedSeconds = 0;
+        $('timer').closest('.timer').classList.remove('low-time');
         stopTimer(); tick(); timerId = setInterval(tick, 1000);
         show('quiz');
         render();
@@ -93,10 +106,10 @@
   }
 
   // ---------- завершення
-  function finish() {
+  function finish(fromTimeout = false) {
     if (busy) return;
     const unanswered = questions.length - Object.keys(answers).length;
-    if (unanswered > 0 && !confirm(`Без відповіді: ${unanswered}. Такі питання зарахуються як неправильні. Завершити тест?`)) return;
+    if (!fromTimeout && unanswered > 0 && !confirm(`Без відповіді: ${unanswered}. Такі питання зарахуються як неправильні. Завершити тест?`)) return;
 
     busy = true;
     $('nextBtn').disabled = true;
@@ -110,7 +123,7 @@
         token,
         full_name: student.full_name,
         group_name: student.group_name,
-        duration_sec: Math.round((Date.now() - startedAt) / 1000),
+        duration_sec: Math.min(Math.round((Date.now() - startedAt) / 1000), TEST_DURATION_SECONDS),
         answers: Object.entries(answers).map(([id, key]) => ({ question_id: Number(id), selected_option: key })),
       }),
     })
@@ -125,13 +138,16 @@
   }
 
   function showResult(data) {
+    const grade = Math.max(1, Math.min(12, Math.floor((data.percent * 12) / 100)));
+    $('gradeText').textContent = `${grade} ${grade === 1 ? 'бал' : grade < 5 ? 'бали' : 'балів'}`;
+    $('percentSummary').textContent = `Результат: ${Math.round(data.percent)}%`;
     $('verdict').textContent = data.percent >= 90 ? 'Відмінний результат'
       : data.passed ? 'Добрий результат' : 'Варто повторити матеріал';
     $('statusPill').replaceChildren(h('span', { class: 'status ' + (data.passed ? 'ok' : 'low') },
       icon(data.passed ? 'check' : 'x'), data.passed ? 'Залік' : 'Не складено'));
     $('scoreText').textContent = `${data.score} з ${data.total}`;
     $('percentText').textContent = `${Math.round(data.percent)}%`;
-    $('timeText').textContent = `Час: ${$('timer').textContent}`;
+    $('timeText').textContent = `Час проходження: ${formatDuration(Math.min(elapsedSeconds, TEST_DURATION_SECONDS))}`;
     show('result');
 
     // анімація кільця (довжина кола = 2πr ≈ 326.7)
@@ -159,7 +175,7 @@
 
   // ---------- події
   $('prevBtn').addEventListener('click', () => go(-1));
-  $('nextBtn').addEventListener('click', () => (index === questions.length - 1 ? finish() : go(1)));
+  $('nextBtn').addEventListener('click', () => (index === questions.length - 1 ? finish(false) : go(1)));
   $('againBtn').addEventListener('click', load);
 
   document.addEventListener('keydown', (event) => {

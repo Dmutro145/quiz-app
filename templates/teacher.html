@@ -64,38 +64,22 @@
 </div>
 
 <div class="bento-grid">
-  <div class="glass kpi accent span3 reveal d1"><svg class="i lg"><use href="#i-trending-up"/></svg><div class="label">Середній бал</div><div class="value" id="kAvg">–</div></div>
-  <div class="glass kpi span3 reveal d2"><svg class="i lg"><use href="#i-clipboard-check"/></svg><div class="label">Пройдено тестів</div><div class="value" id="kTests">–</div></div>
-  <div class="glass kpi span3 reveal d3"><svg class="i lg"><use href="#i-users"/></svg><div class="label">Студентів</div><div class="value" id="kStudents">–</div></div>
-  <div class="glass kpi span3 reveal d4"><svg class="i lg"><use href="#i-circle-check"/></svg><div class="label" id="kPassLabel">Склали</div><div class="value" id="kPass">–</div></div>
-
-  <section class="glass pad span7 reveal d2">
-    <div class="card-title"><h3>Успішність за лекціями</h3><span class="muted">середній %, кількість тестів</span></div>
-    <div id="byLecture"></div>
-    <p class="legend">Пунктирна риска — поріг заліку.</p>
-  </section>
-  <section class="glass pad span5 reveal d3">
-    <div class="card-title"><h3>Успішність за групами</h3><span class="muted">середній %, кількість тестів</span></div>
-    <div id="byGroup"></div>
-  </section>
-
-  <section class="glass pad span12 reveal d3">
-    <div class="card-title"><h3>Динаміка за днями</h3><span class="muted">середній % за день</span></div>
-    <div id="timeline"></div>
-  </section>
-
   <section class="glass span12 reveal d4">
     <div class="table-tools">
       <h3>Усі результати</h3>
-      <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Пошук за прізвищем" aria-label="Пошук за прізвищем"></div>
+      <div class="result-searches">
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="search" placeholder="Пошук за прізвищем" aria-label="Пошук за прізвищем"></div>
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="searchLecture" placeholder="Пошук за лекцією" aria-label="Пошук за лекцією"></div>
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="searchGroup" placeholder="Пошук за групою" aria-label="Пошук за групою"></div>
+      </div>
     </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Студент</th><th>Лекція</th><th>Дата</th><th>Результат</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="muted">Завантаження…</td></tr></tbody>
+        <thead><tr><th>Студент</th><th>Лекція</th><th>Дата</th><th>Результат</th><th>Бали</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="muted">Завантаження…</td></tr></tbody>
       </table>
     </div>
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/teacher.js?v=3"></script>{% endblock %}
+{% block scripts %}<script src="/static/teacher.js?v=7"></script>{% endblock %}

@@ -2,7 +2,7 @@
 {% block title %}Контроль знань — почати тест{% endblock %}
 {% block nav_test %}aria-current="page"{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/home.css?v=7">
+<link rel="stylesheet" href="/static/home.css?v=9">
 <div class="bento">
   <div class="bento-left">
     <section class="glass hero reveal">
@@ -17,6 +17,7 @@
       <div class="subjects-head">
         <h2 id="subjectsTitle">Ваші предмети</h2>
         <div class="subjects-nav">
+          <button type="button" class="nav-btn mobile-subjects-collapse" id="subjectsCollapse" aria-label="Згорнути ваші предмети" aria-expanded="true"><svg class="i"><use href="#i-chevron-right"/></svg></button>
           <button type="button" class="nav-btn" id="subjPrev" aria-label="Попередні предмети"><svg class="i"><use href="#i-chevron-left"/></svg></button>
           <button type="button" class="nav-btn" id="subjNext" aria-label="Наступні предмети"><svg class="i"><use href="#i-chevron-right"/></svg></button>
         </div>
@@ -61,4 +62,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/index.js?v=5"></script>{% endblock %}
+{% block scripts %}<script src="/static/index.js?v=6"></script>{% endblock %}

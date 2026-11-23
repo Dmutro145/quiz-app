@@ -183,17 +183,23 @@
   // ---------- таблиця
   function renderRows() {
     const term = $('search').value.trim().toLowerCase();
-    const rows = allRows.filter((r) => !term || r.student_name.toLowerCase().includes(term));
+    const lectureTerm = $('searchLecture').value.trim().toLowerCase();
+    const groupTerm = $('searchGroup').value.trim().toLowerCase();
+    const rows = allRows.filter((r) =>
+      (!term || r.student_name.toLowerCase().includes(term)) &&
+      (!lectureTerm || r.lecture_title.toLowerCase().includes(lectureTerm)) &&
+      (!groupTerm || r.group_name.toLowerCase().includes(groupTerm)));
     const body = $('rows');
     if (!rows.length) {
-      body.replaceChildren(h('tr', {}, h('td', { colspan: 4, class: 'muted', text: 'Немає результатів за цими умовами' })));
+      body.replaceChildren(h('tr', {}, h('td', { colspan: 5, class: 'muted', text: 'Немає результатів за цими умовами' })));
       return;
     }
     body.replaceChildren(...rows.map((r) => h('tr', {},
       h('td', { class: 'c-student' }, h('div', { class: 'name', text: r.student_name }), h('small', { text: r.group_name })),
       h('td', { class: 'c-lecture' }, h('div', { text: r.lecture_title }), h('small', { text: r.discipline_name })),
       h('td', { class: 'c-date' }, h('div', { text: formatDate(r.created_at) }), h('small', { text: 'Час ' + formatDuration(r.duration_sec) })),
-      h('td', { class: 'c-result' }, h('span', { class: 'pill ' + levelOf(r.percent), text: `${r.score}/${r.total_questions} · ${Math.round(r.percent)}%` })),
+      h('td', { class: 'c-result' }, h('span', { class: 'pill ' + levelOf(r.percent), text: `${Math.round(r.percent)}%` })),
+      h('td', { class: 'c-score' }, h('strong', { text: `${r.score} / ${r.total_questions}` })),
     )));
   }
 
@@ -202,19 +208,7 @@
     const qs = query();
     $('exportBtn').href = '/api/export.csv' + (qs ? '?' + qs : '');
     try {
-      const [stats, rows] = await Promise.all([api('/api/analytics?' + qs), api('/api/results?' + qs)]);
-      $('kTests').textContent = stats.total_tests;
-      $('kStudents').textContent = stats.unique_students;
-      $('kAvg').textContent = stats.total_tests ? stats.average_score_percent + '%' : '–';
-      $('kPass').textContent = stats.total_tests ? stats.pass_rate_percent + '%' : '–';
-      $('kPassLabel').textContent = `Склали, від ${stats.pass_threshold}%`;
-
-      bars($('byLecture'), stats.by_lecture.map((l) => ({
-        label: l.lecture, sub: l.discipline, value: l.avg_percent, count: l.tests })), 'Ще немає даних');
-      bars($('byGroup'), stats.by_group.map((g) => ({
-        label: g.grp, sub: `${g.students} студ.`, value: g.avg_percent, count: g.tests })), 'Ще немає даних');
-      timeline($('timeline'), stats.timeline);
-
+      const rows = await api('/api/results?' + qs);
       allRows = rows;
       renderRows();
       $('updatedAt').textContent = 'Оновлено ' + new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
@@ -227,6 +221,8 @@
   $('fLecture').addEventListener('change', refresh);
   $('fGroup').addEventListener('change', refresh);
   $('search').addEventListener('input', renderRows);
+  $('searchLecture').addEventListener('input', renderRows);
+  $('searchGroup').addEventListener('input', renderRows);
 
   loadFilters().then(refresh).catch((error) => {
     $('rows').replaceChildren(h('tr', {}, h('td', { colspan: 4, class: 'form-error', text: error.message })));

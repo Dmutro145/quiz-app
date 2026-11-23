@@ -66,4 +66,14 @@
 @media (max-width: 699px) {
   .hero { flex-direction: column; align-items: flex-start; }
   .subjects-track { grid-auto-columns: 86%; min-height: 0; }
+  .subjects-nav { gap: 6px; }
+  .mobile-subjects-collapse { display: grid; }
+  .mobile-subjects-collapse .i { transition: transform .2s ease; }
+  .subjects.is-collapsed .subjects-track,
+  .subjects.is-collapsed .subjects-hint { display: none; }
+  .subjects.is-collapsed .mobile-subjects-collapse .i { transform: rotate(90deg); }
+}
+
+@media (min-width: 700px) {
+  .mobile-subjects-collapse { display: none; }
 }

@@ -108,6 +108,17 @@
   track.addEventListener('scroll', updateNav, { passive: true });
   window.addEventListener('resize', updateNav);
 
+  const subjectsSection = $('subjectsCollapse').closest('.subjects');
+  const collapseBtn = $('subjectsCollapse');
+  function setSubjectsCollapsed(collapsed) {
+    subjectsSection.classList.toggle('is-collapsed', collapsed);
+    collapseBtn.setAttribute('aria-expanded', String(!collapsed));
+    collapseBtn.setAttribute('aria-label', collapsed ? 'Розгорнути ваші предмети' : 'Згорнути ваші предмети');
+  }
+  collapseBtn.addEventListener('click', () => {
+    setSubjectsCollapsed(!subjectsSection.classList.contains('is-collapsed'));
+  });
+
   api('/api/catalog')
     .then((items) => {
       catalog = items;
@@ -134,6 +145,7 @@
     if (!groupName) return showError('Вкажіть академічну групу.');
     if (!disciplineSelect.value) return showError('Оберіть дисципліну.');
     if (!lectureSelect.value) return showError('Оберіть лекцію.');
+    setSubjectsCollapsed(true);
 
     const title = lectureSelect.options[lectureSelect.selectedIndex].text.split(' · ')[0];
     try {

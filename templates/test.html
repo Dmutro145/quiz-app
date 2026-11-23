@@ -17,7 +17,7 @@
         <div class="eyebrow" id="studentInfo"></div>
         <h2 id="lectureTitle"></h2>
       </div>
-      <div class="timer" title="Час проходження"><svg class="i"><use href="#i-clock"/></svg><span id="timer">00:00</span></div>
+      <div class="timer" title="Залишилось часу" role="timer" aria-live="polite"><svg class="i"><use href="#i-clock"/></svg><span id="timer">10:00</span></div>
     </div>
     <div class="progress reveal d1"><div id="progressBar"></div></div>
 
@@ -37,6 +37,11 @@
 
   <section id="result" class="glass result reveal" hidden>
     <div class="eyebrow">Тест завершено</div>
+    <div class="grade-summary" id="gradeSummary">
+      <span>Ваша оцінка за 12-бальною шкалою</span>
+      <strong id="gradeText">0 балів</strong>
+      <small id="percentSummary">Результат: 0%</small>
+    </div>
     <div class="ring" id="ring">
       <svg width="176" height="176" viewBox="0 0 120 120" aria-hidden="true">
         <defs>
@@ -60,4 +65,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/test.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/test.js?v=3"></script>{% endblock %}
